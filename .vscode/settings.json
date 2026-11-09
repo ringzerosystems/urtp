@@ -1,0 +1,9 @@
+{
+  "C_Cpp.default.cStandard": "gnu23",
+  "C_Cpp.default.compilerPath": "/usr/bin/clang",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+  "C_Cpp.default.intelliSenseMode": "linux-clang-x64",
+  "files.associations": {
+    "*.h": "c"
+  }
+}

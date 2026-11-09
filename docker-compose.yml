@@ -1,0 +1,92 @@
+services:
+  urtp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: urtp:latest
+    container_name: urtp
+    restart: unless-stopped
+    # io_uring requires unconfined seccomp profile or explicit io_uring syscall permission
+    security_opt:
+      - seccomp:unconfined
+    # CAP_SYS_NICE is required if utilizing io_uring SQPOLL kernel worker thread (-s)
+    cap_add:
+      - SYS_NICE
+    # io_uring locks SQ/CQ rings and registered buffers in memory
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      # Kamailio / OpenSIPS ng control protocol (bencode over UDP)
+      - "22222:22222/udp"
+      # TCP control protocol & Prometheus HTTP metrics endpoint (GET /metrics)
+      - "22222:22222/tcp"
+      # Symmetric RTP / RTCP media stream port range
+      # Note: For ultra-high-throughput production setups with full 30000-40000 range,
+      # 'network_mode: host' is recommended to eliminate container bridge overhead.
+      - "30000-30100:30000-30100/udp"
+    networks:
+      - urtp-net
+    volumes:
+      - ${PCAP_HOST_DIR:-./pcap}:/pcap
+    env_file:
+      - path: .env
+        required: false
+      - path: ${ENV_FILE:-.env}
+        required: false
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    container_name: urtp-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - urtp-net
+    depends_on:
+      - urtp
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: urtp-grafana
+    restart: unless-stopped
+    environment:
+      # Anonymous access without login (direct dashboard access as Admin)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/urtp-dashboard.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - urtp-net
+    depends_on:
+      - prometheus
+
+# Multi-service bridge network for interconnecting urtp with Prometheus and Grafana
+networks:
+  urtp-net:
+    name: urtp-net
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:

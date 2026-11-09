@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: "urtp"
+    orgId: 1
+    folder: "urtp"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
